@@ -78,15 +78,22 @@ public:
             throw size_mismatch();
         }
         // indptr must be non-decreasing and last equals count
-        if (indptr_.empty() || indptr_.back() != count) {
+        if (indptr_.empty() || indptr_[0] != 0 || indptr_.back() != count) {
             throw size_mismatch();
         }
         for (size_t i = 1; i < indptr_.size(); ++i) {
-            if (indptr_[i] < indptr_[i - 1]) throw size_mismatch();
+            if (indptr_[i] < indptr_[i - 1] || indptr_[i] > count) throw size_mismatch();
         }
         // indices must be within column range
         for (size_t k = 0; k < indices_.size(); ++k) {
             if (indices_[k] >= ncols_) throw invalid_index();
+        }
+        // ensure column indices are strictly increasing within each row
+        for (size_t i = 0; i < nrows_; ++i) {
+            size_t s = indptr_[i], e = indptr_[i + 1];
+            for (size_t p = s; p + 1 < e; ++p) {
+                if (!(indices_[p] < indices_[p + 1])) throw size_mismatch();
+            }
         }
     }
 
@@ -99,18 +106,16 @@ public:
     // Convert dense matrix representation to CSR format
     CSRMatrix(size_t n, size_t m, const std::vector<std::vector<T>> &dense)
         : nrows_(n), ncols_(m), indptr_(n + 1, 0) {
+        if (dense.size() != nrows_) throw size_mismatch();
         indices_.clear();
         data_.clear();
-        indices_.reserve(n * (m ? 1 : 0));
-        data_.reserve(n * (m ? 1 : 0));
         for (size_t i = 0; i < nrows_; ++i) {
-            if (i < dense.size()) {
-                const auto &row = dense[i];
-                for (size_t j = 0; j < ncols_ && j < row.size(); ++j) {
-                    if (!(row[j] == T{})) {
-                        indices_.push_back(j);
-                        data_.push_back(row[j]);
-                    }
+            const auto &row = dense[i];
+            if (row.size() != ncols_) throw size_mismatch();
+            for (size_t j = 0; j < ncols_; ++j) {
+                if (!(row[j] == T{})) {
+                    indices_.push_back(j);
+                    data_.push_back(row[j]);
                 }
             }
             indptr_[i + 1] = indices_.size();
@@ -217,4 +222,3 @@ public:
 }
 
 #endif // CSR_MATRIX_HPP
-
